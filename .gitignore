@@ -24,7 +24,8 @@ mori-sprite-studio/
 静态图/_pre_fix2/
 静态图/_original/
 静态图/_original2/
-静态图/walking-*.png
+静态图/*-sheet*.png
+静态图/*-static-base*.png
 GLM形象参考图/*
 !GLM形象参考图/成女头像.png
 
