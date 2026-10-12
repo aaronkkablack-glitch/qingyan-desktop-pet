@@ -40,3 +40,11 @@ python -m PyInstaller 清言桌宠.spec
 `run_checks.py` 仅运行本地测试。`test_smoke.py` 默认不执行外部模型请求；不要重复探测
 已人工验收的 space-bunny-free。仓库包含程序、测试与运行所需的 7 状态帧序列动画和立绘；
 素材制作物料与发布打包工具不随仓库分发。
+
+## 许可
+
+- **代码**：GNU General Public License v3.0（[LICENSE](LICENSE)）——`pet/`、`freelane/`、
+  `tests/`、`rules_bridge/` 及构建脚本均适用
+- **角色素材**：CC BY-NC-SA 4.0（[LICENSE-ASSETS.md](LICENSE-ASSETS.md)）——`静态图/`、
+  `GLM形象参考图/` 与 `assets/` 下的角色图像，禁止商业使用
+- 本项目为基于智谱清言（GLM）非官方拟人形象的同人创作，与智谱官方无关
