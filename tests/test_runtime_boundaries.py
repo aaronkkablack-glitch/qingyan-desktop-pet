@@ -33,11 +33,8 @@ def test_source_and_dist_runtime_contracts():
             sys.frozen = old_frozen
         sys.executable = old_executable
 
-    exe = ROOT / "dist" / "清言V1.0.exe"
-    assert exe.is_file() and exe.stat().st_size > 50 * 1024 * 1024
-    assert (ROOT / "dist" / "config.json").is_file()
-    assert (ROOT / "dist" / "data").is_dir()
-    assert (ROOT / "dist" / "互动插件").is_dir()
+    # 本测试验证路径契约；干净clone没有dist和用户数据。
+    # 实际exe资源/持久化检查由隔离--release-check负责，不能要求开发者已运行过exe。
 
 
 def test_single_instance_lock_contract():

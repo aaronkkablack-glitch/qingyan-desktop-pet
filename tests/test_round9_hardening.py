@@ -87,9 +87,12 @@ def test_release_check_refuses_outside_isolation():
     assert (os.path.getmtime(cfg) if os.path.exists(cfg) else None) == before, "被拒绝时不得改写真实配置"
     # 设了环境变量但目录不在临时目录下，同样拒绝
     env["QINGYAN_RELEASE_CHECK_ISOLATED"] = "1"
-    r = subprocess.run([sys.executable, "main.py", "--release-check", out], cwd=root, env=env,
+    # 不依赖仓库实际位置：CI/审查可能将源码clone到临时目录。
+    script = ("from unittest.mock import patch; from pet.release_check import _require_isolation; "
+              "\nwith patch('pet.release_check._under_temp', return_value=False):\n _require_isolation()")
+    r = subprocess.run([sys.executable, "-c", script], cwd=root, env=env,
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-    assert r.returncode == 2, "项目根不在临时目录，即使有环境变量也必须拒绝"
+    assert r.returncode == 2, "非隔离位置即使有环境变量也必须拒绝"
 
 
 def test_sensitive_tools_require_confirmation():
