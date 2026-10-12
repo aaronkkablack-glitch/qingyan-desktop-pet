@@ -1,0 +1,49 @@
+# ==== 用户数据与私人内容（绝不入库）====
+config.json
+data/
+开发日志.md
+备份/
+freelane/freelane.state.json
+freelane/freelane.log
+*.log
+
+# ==== 构建产物与发布物（走 GitHub Releases / 本地保留）====
+build/
+dist/
+release/
+*.pdb
+*.obj
+
+# ==== 第三方克隆项目（本地保留）====
+mori-sprite-studio/
+
+# ==== 素材排除（精简档：只保留桌宠运行必需素材）====
+静态图/HD文件/
+静态图/HD底图/
+静态图/_pre_fix/
+静态图/_pre_fix2/
+静态图/_original/
+静态图/_original2/
+GLM形象参考图/
+
+# ==== 调试残留 ====
+_ss_log.txt
+_hover_test*.png
+_exe_test_shot.png
+
+# ==== Python ====
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/_tmp*/
+
+# ==== 系统杂项 ====
+*.tmp
+Thumbs.db
+.DS_Store
+config.json.bak*
+*.bak-before-freelane
+
+# 与本项目无关的个人工具脚本（含外部 API Key），绝不入库
+启动隔离CC-HAPI.bat
