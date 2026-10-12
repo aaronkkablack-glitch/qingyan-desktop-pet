@@ -47,3 +47,15 @@ config.json.bak*
 
 # 与本项目无关的个人工具脚本（含外部 API Key），绝不入库
 启动隔离CC-HAPI.bat
+
+# ==== 素材制作与发布工具（仓库只含程序与测试；这些文件仅本地保留）====
+静态图/
+清理白边.py
+帧序列后处理.py
+最终发布复检.md
+poc_animate.py
+package_release.py
+verify_upgrade.py
+measure_resources.py
+freelane/probe_models.py
+freelane/启动白嫖代理.bat

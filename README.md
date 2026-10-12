@@ -35,9 +35,8 @@ API Key 使用 Windows DPAPI 保护，换机器或 Windows 用户后需要重新
 python -m pip install -r requirements-build.txt
 python run_checks.py
 python -m PyInstaller 清言桌宠.spec
-python package_release.py
 ```
 
 `run_checks.py` 仅运行本地测试。`test_smoke.py` 默认不执行外部模型请求；不要重复探测
-已人工验收的 space-bunny-free。发布包只包含白名单文件，不包含个人数据。
-详见 [发布与验收.md](发布与验收.md) 和 [开发日志.md](开发日志.md)。
+已人工验收的 space-bunny-free。仓库只含程序与测试；动画素材（`静态图/`）与发布打包
+工具不随仓库分发——打包 exe 需要本机存在素材目录，源码模式缺素材时会回退静态头像。
