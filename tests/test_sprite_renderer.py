@@ -1,7 +1,8 @@
-"""SpriteSheetRenderer 单元测试：帧提取、one-shot 回调、素材回退链。
+"""SpriteSheetRenderer 单元测试：帧序列播放、one-shot 回调、回退链。
 运行: python -m pytest tests/test_sprite_renderer.py -q  或 QT_QPA_PLATFORM=offscreen python tests/test_sprite_renderer.py
 """
 import os
+import shutil
 import sys
 for _s in (sys.stdout, sys.stderr):  # Windows GBK 控制台下 ✔ 等字符不应让测试以非零退出
     if hasattr(_s, "reconfigure"):
@@ -10,7 +11,6 @@ for _s in (sys.stdout, sys.stderr):  # Windows GBK 控制台下 ✔ 等字符不
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from pet.animation import SpriteSheetRenderer
@@ -18,15 +18,14 @@ from pet.animation import SpriteSheetRenderer
 TMP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_tmp_sprites")
 
 
-def make_sheet(colors):
-    """4×4 sheet，每格纯色（colors[i] = (r,g,b)），用于断言当前播放帧。"""
-    img = QImage(1024, 1024, QImage.Format_RGBA8888)
-    img.fill(0)
-    p = QPainter(img)
+def make_frames(root: str, state: str, colors) -> None:
+    """往 root/帧序列/{state}/ 写 f01..fNN 纯色帧（colors[i]=(r,g,b)），用于断言当前播放帧。"""
+    d = os.path.join(root, "帧序列", state)
+    os.makedirs(d, exist_ok=True)
     for i, (r, g, b) in enumerate(colors):
-        p.fillRect(QRectF((i % 4) * 256, (i // 4) * 256, 256, 256), QColor(r, g, b, 255))
-    p.end()
-    return img
+        img = QImage(64, 64, QImage.Format_RGBA8888)
+        img.fill(QColor(r, g, b, 255))
+        img.save(os.path.join(d, f"f{i + 1:02d}.png"))
 
 
 def center_color(img: QImage) -> tuple:
@@ -34,25 +33,20 @@ def center_color(img: QImage) -> tuple:
     return (c.red(), c.green(), c.blue())
 
 
-def setup_renderer(tmpdir, sheets: dict, bases: dict = None):
+def setup_renderer(tmpdir, seqs: dict):
     os.makedirs(tmpdir, exist_ok=True)
-    for name, colors in sheets.items():
-        make_sheet(colors).save(os.path.join(tmpdir, f"{name}-sheet.png"))
-    for name, color in (bases or {}).items():
-        img = QImage(256, 256, QImage.Format_RGBA8888)
-        img.fill(QColor(*color, 255))
-        img.save(os.path.join(tmpdir, f"{name}-static-base.png"))
-    # 统一 1280ms/16帧（80ms/帧，同旧 12.5fps 假设），断言数学保持简单
-    return SpriteSheetRenderer(tmpdir, durations={n: 1280 for n in sheets})
+    for name, colors in seqs.items():
+        make_frames(tmpdir, name, colors)
+    # 统一 1280ms/16帧（80ms/帧），断言数学保持简单
+    return SpriteSheetRenderer(tmpdir, durations={n: 1280 for n in seqs})
 
 
 def test_default_durations_table():
     """不传 durations 时用内置默认表：idle 4600ms/轮，t=2.3s 应在帧 8（16帧的中间）。"""
     colors = [(i * 16, 0, 255 - i * 16) for i in range(16)]
     r = setup_renderer(os.path.join(TMP, "s4"), {"idle": colors})
-    r._durations = {}  # 清空覆盖 → 落到 DEFAULT_STATE_DURATION_MS（idle=4600）
     from pet.animation import DEFAULT_STATE_DURATION_MS
-    r._durations = dict(DEFAULT_STATE_DURATION_MS)
+    r._durations = dict(DEFAULT_STATE_DURATION_MS)   # 落到内置默认表（idle=4600）
     r.set_size(256, 256, 1.0)
     r.set_state("idle"); r._t = 2.3  # 2300/287.5 = 帧 8
     img = QImage(256, 256, QImage.Format_RGBA8888); img.fill(0)
@@ -60,17 +54,14 @@ def test_default_durations_table():
     assert center_color(img) == colors[8], f"默认4600ms下 t=2.3s 应为帧9, got {center_color(img)}"
 
 
-def test_frames_dir_priority():
-    """帧序列目录优先于 sheet；720×720 高清帧直接播放。"""
-    import shutil
+def test_frames_dir_playback():
+    """帧序列直供：720×720 高清帧按可变帧数播放。"""
     d = os.path.join(TMP, "s5")
     os.makedirs(os.path.join(d, "帧序列", "idle"), exist_ok=True)
-    # 4 帧纯色高清帧（720×720）
     for i in range(4):
         img = QImage(720, 720, QImage.Format_RGBA8888)
         img.fill(QColor(i * 60, 255 - i * 60, 128, 255))
         img.save(os.path.join(d, "帧序列", "idle", f"f{i+1:02d}.png"))
-    make_sheet([(10, 10, 10)] * 16).save(os.path.join(d, "idle-sheet.png"))  # 低清 sheet 应被帧序列压过
     r = SpriteSheetRenderer(d, durations={"idle": 4000})
     r.set_size(400, 400, 1.0)
     r.set_state("idle"); r._t = 0.0
@@ -87,7 +78,6 @@ def test_frames_dir_priority():
 
 
 def cleanup():
-    import shutil
     if os.path.isdir(TMP):
         shutil.rmtree(TMP)
 
@@ -105,7 +95,7 @@ def test_frame_playback_and_oneshot():
     p = QPainter(img); r.paint(p); p.end()
     assert center_color(img) == colors[0], f"t=0 应显示第1帧, got {center_color(img)}"
 
-    # t=0.5s @12.5fps → 第 6 帧
+    # t=0.5s @80ms/帧 → 第 6 帧
     r._t = 0.5
     img = QImage(256, 256, QImage.Format_RGBA8888); img.fill(0)
     p = QPainter(img); r.paint(p); p.end()
@@ -131,29 +121,36 @@ def test_frame_playback_and_oneshot():
 
 
 def test_fallback_chain():
-    # 只有 idle 的 sheet，dragging 无素材 → 回退 idle
+    """回退链（帧序列版）：有专属帧序列用专属；无则回退到 SPRITE_FALLBACK 目标的帧序列首帧。"""
     colors = [(50, 50, 50)] * 16
+    # 只有 idle 帧序列：dragging（映射到 idle）回退显示 idle 首帧
     r = setup_renderer(os.path.join(TMP, "s2"), {"idle": colors})
     r.set_size(256, 256, 1.0)
     r.set_state("dragging")
     img = QImage(256, 256, QImage.Format_RGBA8888); img.fill(0)
     p = QPainter(img); r.paint(p); p.end()
-    assert center_color(img) == colors[0], "dragging 无素材应回退 idle"
-
-    # static base 兜底：有 sleeping-base 无 sheet
-    r2 = setup_renderer(os.path.join(TMP, "s3"), {"idle": colors},
-                        {"sleeping": (200, 10, 10)})
-    r2.set_size(256, 256, 1.0)
-    r2.set_state("sleeping")
+    assert center_color(img) == colors[0], "dragging 无帧序列应回退 idle"
+    # 非映射状态（sleeping）缺失时同样回退 idle 首帧
+    r.set_state("sleeping")
     img = QImage(256, 256, QImage.Format_RGBA8888); img.fill(0)
-    p = QPainter(img); r2.paint(p); p.end()
-    assert center_color(img) == (200, 10, 10), "sleeping 应使用 static-base"
+    p = QPainter(img); r.paint(p); p.end()
+    assert center_color(img) == colors[0], "sleeping 无帧序列应回退 idle"
+
+    # 无任何帧序列：构造即抛错（make_renderer 会捕获并回退静态渲染器）
+    empty = os.path.join(TMP, "s3")
+    os.makedirs(empty, exist_ok=True)
+    try:
+        SpriteSheetRenderer(empty)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("空素材目录应抛 RuntimeError")
 
 
 if __name__ == "__main__":
     test_frame_playback_and_oneshot()
     test_fallback_chain()
     test_default_durations_table()
-    test_frames_dir_priority()
+    test_frames_dir_playback()
     cleanup()
     print("SpriteSheetRenderer 测试通过 ✔")

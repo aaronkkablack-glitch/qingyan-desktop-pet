@@ -169,12 +169,12 @@ def make_renderer(config) -> AvatarRenderer:
 
 
 # ---------------------------------------------------------------------------
-# 精灵图动画播放器（mori 产物：{state}-sheet.png 1024×1024 4×4、{state}-static-base.png 256×256）
+# 帧序列动画播放器（mori 产物：静态图/帧序列/{state}/f01.png…，720×720 透明帧直供）
 # ---------------------------------------------------------------------------
 
 SPRITE_STATES = ("idle", "sleeping", "recording", "thinking", "done", "error", "walking", "dragging")
 ONESHOT_STATES = {"done", "error"}          # 播完一遍自动回 idle
-SPRITE_FALLBACK = {"walking": "idle", "dragging": "idle"}  # 无素材时的回退
+SPRITE_FALLBACK = {"walking": "idle", "dragging": "idle"}  # 无该状态帧序列时的回退
 
 # 各状态一轮 16 帧的播放时长（ms）——动作节奏由素材语义决定：
 # 呼吸/睡觉慢，庆祝/出错是爆发所以快。config.json 的 sprite_durations 可覆盖。
@@ -185,10 +185,11 @@ DEFAULT_STATE_DURATION_MS = {
 
 
 class SpriteSheetRenderer(AvatarRenderer):
-    """播放 mori 产出的 4×4 精灵图动画。
+    """播放 mori 产出的高画质帧序列动画（静态图/帧序列/{state}/f*.png）。
 
-    素材解析：{state}-sheet.png 优先（含 "xxx-sheet .png" 空格变体），
-    无 sheet 用 {state}-static-base.png 静态显示，再无则按 SPRITE_FALLBACK 回退。
+    素材解析：只读帧序列目录（可变帧数）；该状态缺失时按 SPRITE_FALLBACK 回退到
+    回退状态的帧序列首帧。早期 4×4 精灵图集（{state}-sheet.png）与 256 静态底图
+    已废弃，不再加载。
     done/error 为 one-shot：播完一遍触发 oneshot_finished 回调（由外部切回 idle）。
     """
 
@@ -196,8 +197,6 @@ class SpriteSheetRenderer(AvatarRenderer):
 
     def __init__(self, assets_dir: str, state: str = "idle", durations: dict | None = None):
         self._dir = assets_dir
-        self._sheets: dict[str, QImage] = {}
-        self._bases: dict[str, QImage] = {}
         self._frame_seqs: dict[str, list[QImage]] = {}   # 高画质帧序列（720×720 透明帧）
         self._durations = {**DEFAULT_STATE_DURATION_MS, **(durations or {})}
         self._t = 0.0
@@ -207,7 +206,6 @@ class SpriteSheetRenderer(AvatarRenderer):
         self._w = self._h = 0
         self._dpr = 1.0
         self._scaled: dict = {}   # frame_key → 显示尺寸的 QPixmap
-        self._sheet_frames = {}
         self._load_all(assets_dir)
 
     def _load_all(self, assets_dir: str):
@@ -220,23 +218,8 @@ class SpriteSheetRenderer(AvatarRenderer):
                 imgs = [im for im in imgs if not im.isNull()]
                 if imgs:
                     self._frame_seqs[name] = imgs
-            sheet = self._find(assets_dir, f"{name}-sheet")
-            if sheet:
-                self._sheets[name] = QImage(sheet)
-            base = self._find(assets_dir, f"{name}-static-base")
-            if base:
-                self._bases[name] = QImage(base)
-        if not self._sheets and not self._bases and not self._frame_seqs:
-            raise RuntimeError(f"素材目录无有效精灵图: {assets_dir}")
-
-    @staticmethod
-    def _find(assets_dir: str, stem: str):
-        import os
-        for cand in (f"{stem}.png", f"{stem} .png"):
-            p = os.path.join(assets_dir, cand)
-            if os.path.exists(p):
-                return p
-        return None
+        if not self._frame_seqs:
+            raise RuntimeError(f"素材目录无有效帧序列: {assets_dir}")
 
     def set_oneshot_callback(self, cb):
         """one-shot 状态播完时调用 cb()（用于切回 idle）。"""
@@ -277,9 +260,7 @@ class SpriteSheetRenderer(AvatarRenderer):
 
     def _n_frames(self, state: str) -> int:
         seq = self._frame_seqs.get(state)
-        if seq:
-            return len(seq)
-        return 16 if state in self._sheets else 1
+        return len(seq) if seq else 1
 
     def tick(self, dt: float):
         """推进时间；one-shot 播完的回调在这里触发（不放在 paint：离屏扫描锚点的 paint
@@ -310,29 +291,17 @@ class SpriteSheetRenderer(AvatarRenderer):
     def _resolve(self) -> QImage | None:
         """当前应显示的完整帧 QImage。
 
-        优先级：帧序列（720×720 高画质直供，可变帧数）> 4×4 sheet（裁格）> static-base > 回退链。
+        本状态帧序列优先；缺失时回退到回退状态的帧序列首帧（静态显示）。
         """
         state = self._state
         seq = self._frame_seqs.get(state)
         if seq:
             return seq[self._frame_index(state, len(seq))]
-        sheet = self._sheets.get(state)
-        if sheet is not None:
-            idx = self._frame_index(state, 16)
-            side = sheet.width() / 4
-            key = (state, idx)
-            if key not in self._sheet_frames:
-                self._sheet_frames[key] = sheet.copy(int((idx % 4) * side), int((idx // 4) * side),
-                                                      int(side), int(side))
-            return self._sheet_frames[key]
-        base = self._bases.get(state)
-        if base is not None:
-            return base
         fb = SPRITE_FALLBACK.get(state, "idle")
         seq = self._frame_seqs.get(fb)
-        if seq:   # 回退到帧序列时取单帧（此前返回整个 list，paint 时 isNull 会抛错）
+        if seq:   # 回退时取单帧（此前返回整个 list，paint 时 isNull 会抛错）
             return seq[0]
-        return self._sheets.get(fb) or self._bases.get(fb)
+        return None
 
     def paint(self, p: QPainter):
         img = self._resolve()
